@@ -33,10 +33,269 @@ const DEFAULT_SETTINGS = {
   fov: 103,
   size: "medium" as keyof typeof SIZES,
   invert: 0,
-  color: "#00ff88",
+  crosshairCode: "0;P;h;0;0l;5;0o;2;0a;1;0f;0;1b;0",
 };
 
 type Settings = typeof DEFAULT_SETTINGS;
+
+/* ============================================================
+   Crosshair system
+   ============================================================ */
+const CROSSHAIR_COLORS: Record<number, string> = {
+  0: "#ffffff", 1: "#00ff00", 2: "#c8ff00", 3: "#ffff00",
+  4: "#ff7700", 5: "#00ffff", 6: "#ff00ff", 7: "#ff0000",
+};
+
+type CrosshairParams = {
+  color: string;
+  innerVisible: boolean;
+  innerT: number; innerL: number; innerO: number; innerA: number;
+  outerVisible: boolean;
+  outerT: number; outerL: number; outerO: number; outerA: number;
+  dot: boolean;
+  outline: number;
+};
+
+function parseCrosshairCode(code: string): CrosshairParams {
+  const parts = code.split(";");
+  const kv: Record<string, string> = {};
+  const MARKERS = new Set(["P", "S", "A"]);
+  let i = (parts[0] && !isNaN(Number(parts[0]))) ? 1 : 0;
+  while (i < parts.length) {
+    const key = parts[i];
+    if (MARKERS.has(key)) { i++; continue; }
+    if (i + 1 < parts.length && !MARKERS.has(parts[i + 1])) {
+      kv[key] = parts[i + 1]; i += 2;
+    } else { i++; }
+  }
+  const c = parseInt(kv["c"] || "0");
+  const color = c === 8 && kv["u"] ? "#" + kv["u"] : (CROSSHAIR_COLORS[c] ?? "#ffffff");
+  const outerA = parseFloat(kv["1a"] || "0");
+  const outerVisible =
+    kv["1b"] === "1" ||
+    (kv["1b"] !== "0" && (outerA > 0 || kv["1l"] !== undefined || kv["1t"] !== undefined));
+  return {
+    color,
+    innerVisible: kv["0b"] !== "0",
+    innerT: parseFloat(kv["0t"] || "2"),
+    innerL: parseFloat(kv["0l"] || "6"),
+    innerO: parseFloat(kv["0o"] || "0"),
+    innerA: parseFloat(kv["0a"] || "1"),
+    outerVisible,
+    outerT: parseFloat(kv["1t"] || "2"),
+    outerL: parseFloat(kv["1l"] || "6"),
+    outerO: parseFloat(kv["1o"] || "0"),
+    outerA: outerA || 1,
+    dot: kv["h"] === "1" || kv["d"] === "1",
+    outline: parseFloat(kv["o"] || "0"),
+  };
+}
+
+function CrosshairRenderer({
+  params,
+  size = 64,
+  flash = false,
+  className,
+}: {
+  params: CrosshairParams;
+  size?: number;
+  flash?: boolean;
+  className?: string;
+}) {
+  const S = size / 64;
+  const cx = size / 2;
+  const outline = params.outline > 0 ? `0 0 0 1px rgba(0,0,0,${params.outline})` : undefined;
+  const scale = flash ? 1.7 : 1;
+
+  const arm = (dir: "top" | "bottom" | "left" | "right", outer = false) => {
+    const t = (outer ? params.outerT : params.innerT) * S;
+    const l = (outer ? params.outerL : params.innerL) * S;
+    const o = (outer ? params.outerO : params.innerO) * S;
+    const a = outer ? params.outerA : params.innerA;
+    const style: React.CSSProperties = {
+      position: "absolute",
+      backgroundColor: params.color,
+      opacity: a,
+      boxShadow: outline,
+      transition: "transform 0.05s ease",
+      transform: `scale(${scale})`,
+      transformOrigin: dir === "top" ? "bottom center" : dir === "bottom" ? "top center" : dir === "left" ? "right center" : "left center",
+    };
+    if (dir === "top")    return <span key={`${outer?'o':'i'}-t`} style={{ ...style, width: t, height: l, left: cx - t / 2, top: cx - o - l }} />;
+    if (dir === "bottom") return <span key={`${outer?'o':'i'}-b`} style={{ ...style, width: t, height: l, left: cx - t / 2, top: cx + o }} />;
+    if (dir === "left")   return <span key={`${outer?'o':'i'}-l`} style={{ ...style, width: l, height: t, left: cx - o - l, top: cx - t / 2 }} />;
+    return               <span key={`${outer?'o':'i'}-r`} style={{ ...style, width: l, height: t, left: cx + o, top: cx - t / 2 }} />;
+  };
+
+  const DIRS = ["top", "bottom", "left", "right"] as const;
+  return (
+    <div className={className} style={{ position: "relative", width: size, height: size }}>
+      {params.innerVisible && DIRS.map((d) => arm(d))}
+      {params.outerVisible && DIRS.map((d) => arm(d, true))}
+      {params.dot && (
+        <span style={{
+          position: "absolute",
+          width: params.innerT * S, height: params.innerT * S,
+          backgroundColor: params.color, opacity: params.innerA,
+          left: cx - (params.innerT * S) / 2, top: cx - (params.innerT * S) / 2,
+          boxShadow: outline,
+        }} />
+      )}
+    </div>
+  );
+}
+
+const PRO_CROSSHAIRS = [
+  { name: "TenZ", team: "T1", code: "0;s;1;P;c;5;h;0;m;1;0l;4;0o;2;0a;1;0f;0;1b;0" },
+  { name: "yay", team: "Ex-OpTic", code: "0;P;h;0;f;0;0l;4;0o;0;0a;1;0f;0;1b;0" },
+  { name: "aspas", team: "MIBR", code: "0;P;c;7;h;0;0l;3;0o;2;0a;1;0f;0;1b;" },
+  { name: "Zekken", team: "MIBR", code: "0;P;c;1;o;1;d;1;0b;0;1b;0" },
+  { name: "ScreaM", team: "Ex-BDS", code: "0;s;1;P;o;1;0t;1;0l;1;0o;4;0a;1;0f;0;1t;1;1l;1;1o;3;1a;0;1m;0;1f;0;S;c;0;o;" },
+  { name: "Nukkye", team: "NIP", code: "0;s;1;P;h;0;0t;1;0l;4;0o;1;0a;1;0f;0;1t;3;1o;2;1a;1;1m;0;1f;" },
+  { name: "Alfajer", team: "Vitality", code: "0;P;h;0;0t;1;0l;4;0o;1;0a;1;0f;0;1t;3;1o;2;1a;1;1m;0;1f;" },
+  { name: "Cryo", team: "100T", code: "0;P;h;0;0l;4;0o;0;0a;1;0f;0;1b;0" },
+  { name: "Asuna", team: "100T", code: "0;s;1;P;h;0;s;0;0l;3;0o;0;0a;1;0f;0;1b;" },
+  { name: "mwzera", team: "MIBR", code: "0;P;c;5;h;0;d;1;z;1;f;0;m;1;0t;1;0l;2;0v;1;0g;1;0o;1;0a;1;0e;0.196;1b;0" },
+  { name: "f0rsakeN", team: "PRX", code: "0;P;h;0;f;0;0l;4;0a;1;0f;0;1b;0" },
+  { name: "crashies", team: "Fnatic", code: "0;s;1;P;c;1;h;0;f;0;0l;4;0o;2;0a;1;0f;0;1b;0" },
+] as const;
+
+function CrosshairPicker({
+  current,
+  onSelect,
+  onClose,
+}: {
+  current: string;
+  onSelect: (code: string) => void;
+  onClose: () => void;
+}) {
+  const [tab, setTab] = useState<"presets" | "import">("presets");
+  const [importCode, setImportCode] = useState("");
+  const [importError, setImportError] = useState("");
+  const [preview, setPreview] = useState<CrosshairParams | null>(null);
+
+  const handleImportChange = (code: string) => {
+    setImportCode(code);
+    setImportError("");
+    if (code.trim()) {
+      try {
+        setPreview(parseCrosshairCode(code.trim()));
+      } catch {
+        setPreview(null);
+      }
+    } else {
+      setPreview(null);
+    }
+  };
+
+  const handleImport = () => {
+    const code = importCode.trim();
+    if (!code) { setImportError("Cole um código válido."); return; }
+    onSelect(code);
+    onClose();
+  };
+
+  return (
+    <div className="overlay">
+      <Reticles />
+      <Card className="w-[min(640px,92vw)] max-h-[85vh] overflow-hidden flex flex-col">
+        <CardContent className="p-0 flex flex-col h-full">
+          {/* Header */}
+          <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-border flex-shrink-0">
+            <h2 className="text-sm font-bold text-foreground">Crosshair</h2>
+            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors text-xs">
+              Fechar
+            </button>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex border-b border-border flex-shrink-0">
+            {(["presets", "import"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`px-6 py-3 text-[9px] uppercase tracking-widest transition-colors ${
+                  tab === t
+                    ? "text-foreground border-b-2 border-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {t === "presets" ? "Pro Players" : "Importar código"}
+              </button>
+            ))}
+          </div>
+
+          {tab === "presets" && (
+            <div className="overflow-y-auto flex-1 p-4">
+              <div className="grid grid-cols-3 gap-3">
+                {PRO_CROSSHAIRS.map((p) => {
+                  const params = parseCrosshairCode(p.code);
+                  const active = current === p.code;
+                  return (
+                    <button
+                      key={p.name}
+                      onClick={() => { onSelect(p.code); onClose(); }}
+                      className={`flex flex-col items-center gap-3 p-4 border transition-colors text-center ${
+                        active
+                          ? "border-foreground bg-foreground/10"
+                          : "border-border hover:border-foreground/40 hover:bg-muted/20"
+                      }`}
+                    >
+                      <div className="w-16 h-16 bg-[#0a121a] flex items-center justify-center flex-shrink-0">
+                        <CrosshairRenderer params={params} size={56} />
+                      </div>
+                      <div>
+                        <p className="text-[9px] font-bold text-foreground leading-tight">{p.name}</p>
+                        <p className="text-[8px] text-muted-foreground mt-0.5">{p.team}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {tab === "import" && (
+            <div className="flex-1 p-6 flex flex-col gap-5">
+              <div>
+                <p className="text-[9px] text-muted-foreground uppercase tracking-widest mb-2">
+                  Código Valorant
+                </p>
+                <Input
+                  placeholder="0;P;h;0;0l;5;0o;2;0a;1;0f;0;1b;0"
+                  value={importCode}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleImportChange(e.target.value)}
+                  className="font-mono text-xs"
+                />
+                {importError && (
+                  <p className="text-[9px] text-destructive mt-2">{importError}</p>
+                )}
+              </div>
+              {preview && (
+                <div className="flex items-center gap-6">
+                  <div className="w-20 h-20 bg-[#0a121a] border border-border flex items-center justify-center">
+                    <CrosshairRenderer params={preview} size={56} />
+                  </div>
+                  <div className="text-[9px] text-muted-foreground uppercase tracking-wider space-y-1">
+                    <p>Cor: <span className="text-foreground" style={{ color: preview.color }}>{preview.color}</span></p>
+                    <p>Inner: {preview.innerL}px · offset {preview.innerO}px</p>
+                    {preview.outerVisible && <p>Outer: {preview.outerL}px · offset {preview.outerO}px</p>}
+                    {preview.dot && <p>Center dot: sim</p>}
+                  </div>
+                </div>
+              )}
+              <div className="flex justify-end">
+                <Button onClick={handleImport}>
+                  Importar
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 type StatsState = { score: number; time: number; acc: number };
 type ResultsData = {
   score: number;
@@ -563,11 +822,13 @@ function Menu({
   settings,
   onPlay,
   onSettings,
+  onCrosshairs,
 }: {
   best: number | null;
   settings: Settings;
   onPlay: () => void;
   onSettings: () => void;
+  onCrosshairs: () => void;
 }) {
   return (
     <div className="overlay">
@@ -641,17 +902,31 @@ function Menu({
             ))}
           </div>
 
-          {/* Footer stats */}
-          <div className="flex items-center gap-6 px-6 py-3 border-t border-border bg-muted/10">
-            {[
-              { k: "Recorde", v: best == null ? "—" : String(best) },
-              { k: "Sens", v: Number(settings.sens).toFixed(2) },
-              { k: "DPI", v: String(settings.dpi) },
-            ].map((s) => (
-              <div key={s.k} className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest">
-                {s.k} <span className="text-foreground font-bold">{s.v}</span>
+          {/* Footer */}
+          <div className="flex items-center gap-4 px-6 py-3 border-t border-border bg-muted/10">
+            {/* Crosshair preview button */}
+            <button
+              onClick={onCrosshairs}
+              className="flex items-center gap-3 group hover:opacity-80 transition-opacity flex-shrink-0"
+              title="Trocar crosshair"
+            >
+              <div className="w-8 h-8 bg-[#0a121a] border border-border flex items-center justify-center group-hover:border-foreground/40 transition-colors">
+                <CrosshairRenderer params={parseCrosshairCode(settings.crosshairCode)} size={28} />
               </div>
-            ))}
+            </button>
+            <div className="w-px h-4 bg-border flex-shrink-0" />
+            {/* Stats */}
+            <div className="flex gap-5 flex-1 min-w-0">
+              {[
+                { k: "Recorde", v: best == null ? "—" : String(best) },
+                { k: "Sens", v: Number(settings.sens).toFixed(2) },
+                { k: "DPI", v: String(settings.dpi) },
+              ].map((s) => (
+                <div key={s.k} className="text-[10px] font-mono text-muted-foreground uppercase tracking-widest whitespace-nowrap">
+                  {s.k} <span className="text-foreground font-bold">{s.v}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -972,13 +1247,6 @@ function GameStyles() {
     #app ::selection{background:var(--red);color:var(--ink);}
     .game-canvas{position:fixed;inset:0;display:block;z-index:0;}
 
-    .crosshair{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);pointer-events:none;z-index:5;display:none;}
-    .crosshair.show{display:block;}
-    .crosshair .arm{position:absolute;background:var(--ch,#00ff88);box-shadow:0 0 0 1px rgba(0,0,0,.9);transition:transform .05s ease;}
-    .crosshair .h{width:7px;height:2px;}.crosshair .v{width:2px;height:7px;}
-    .crosshair .l{right:5px;top:-1px;}.crosshair .r{left:5px;top:-1px;}
-    .crosshair .t{bottom:5px;left:-1px;}.crosshair .b{top:5px;left:-1px;}
-    .crosshair.hit .arm{transform:scale(1.9);}
 
     .hud{position:absolute;inset:0;pointer-events:none;z-index:4;display:none;}
     .hud.show{display:block;}
@@ -1021,7 +1289,7 @@ export default function AimRangeTrainer() {
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const settingsReturn = useRef<string>("menu");
 
-  const [screen, setScreen] = useState<"menu" | "settings" | "playing" | "paused" | "results">(
+  const [screen, setScreen] = useState<"menu" | "settings" | "playing" | "paused" | "results" | "crosshairs">(
     "menu",
   );
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -1100,33 +1368,35 @@ export default function AimRangeTrainer() {
     (patch: Partial<Settings>) => setSettings((p) => ({ ...p, ...patch })),
     [],
   );
+  const openCrosshairs = useCallback(() => setScreen("crosshairs"), []);
+  const closeCrosshairs = useCallback(() => setScreen("menu"), []);
 
   const playing = screen === "playing";
+  const crosshairParams = parseCrosshairCode(settings.crosshairCode);
 
   return (
     <div id="app" className="dark">
       <GameStyles />
       <canvas ref={canvasRef} className="game-canvas" />
 
-      <div
-        className={`crosshair ${playing ? "show" : ""} ${hit ? "hit" : ""}`}
-        style={{ "--ch": settings.color } as React.CSSProperties}
-      >
-        <span className="arm h l" />
-        <span className="arm h r" />
-        <span className="arm v t" />
-        <span className="arm v b" />
-      </div>
+      {playing && (
+        <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", pointerEvents: "none", zIndex: 5 }}>
+          <CrosshairRenderer params={crosshairParams} size={72} flash={hit} />
+        </div>
+      )}
 
       <div className={`hud ${playing ? "show" : ""}`}>
         <Hud stats={stats} />
       </div>
 
       {screen === "menu" && (
-        <Menu best={best} settings={settings} onPlay={startGame} onSettings={openSettings} />
+        <Menu best={best} settings={settings} onPlay={startGame} onSettings={openSettings} onCrosshairs={openCrosshairs} />
       )}
       {screen === "settings" && (
         <SettingsPanel settings={settings} onChange={changeSettings} onClose={closeSettings} />
+      )}
+      {screen === "crosshairs" && (
+        <CrosshairPicker current={settings.crosshairCode} onSelect={(code) => changeSettings({ crosshairCode: code })} onClose={closeCrosshairs} />
       )}
       {screen === "paused" && (
         <Pause onResume={resumeGame} onSettings={openSettings} onMenu={toMenu} />
