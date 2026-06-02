@@ -25,7 +25,7 @@ export class ReplayEngine {
 
   cameraTrack: CameraPoint[] = [];
 
-  onTimeUpdate?: (t: number) => void;
+  onFrame?: (t: number, yaw: number, pitch: number) => void;
   onEnd?: () => void;
 
   _raf!: number;
@@ -118,7 +118,7 @@ export class ReplayEngine {
         this.eventCursor++;
       }
 
-      this.onTimeUpdate?.(this.currentT);
+      this.onFrame?.(this.currentT, cam.yaw, cam.pitch);
 
       if (this.currentT >= this.replay.duration) {
         this.playing = false;
@@ -140,8 +140,9 @@ export class ReplayEngine {
   seek(t: number) {
     this.currentT = Math.max(0, Math.min(t, this.replay.duration));
     this._applyAt(this.currentT);
+    const sc = this._findCamera(this.currentT);
+    this.onFrame?.(this.currentT, sc.yaw, sc.pitch);
     this.renderer.render(this.scene, this.camera);
-    this.onTimeUpdate?.(this.currentT);
   }
 
   setSpeed(s: number) { this.speedFactor = s; }
