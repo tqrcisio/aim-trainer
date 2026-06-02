@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Playwright / debug screenshots
+.playwright-mcp/
+aim-*.png
