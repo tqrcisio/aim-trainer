@@ -8,10 +8,12 @@ export function Results({
   r,
   onAgain,
   onMenu,
+  onReplay,
 }: {
   r: ResultsData;
   onAgain: () => void;
   onMenu: () => void;
+  onReplay: () => void;
 }) {
   const stats = [
     { v: `${r.acc}%`, k: "Precisão" },
@@ -52,6 +54,7 @@ export function Results({
             </p>
             <div className="flex gap-3">
               <Button onClick={onAgain}>De novo</Button>
+              <Button variant="outline" onClick={onReplay}>Replay</Button>
               <Button variant="outline" onClick={onMenu}>Menu</Button>
             </div>
           </div>

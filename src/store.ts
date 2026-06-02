@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import type { Replay } from "./engine/replay-types";
 
 export type Settings = {
   sens: number;
@@ -19,17 +20,22 @@ const DEFAULT_SETTINGS: Settings = {
   crosshairCode: "0;P;h;0;0l;5;0o;2;0a;1;0f;0;1b;0",
 };
 
-type SettingsStore = {
+type Store = {
   settings: Settings;
   patch: (update: Partial<Settings>) => void;
+  replays: Replay[];
+  addReplay: (r: Replay) => void;
 };
 
-export const useSettingsStore = create<SettingsStore>()(
+export const useSettingsStore = create<Store>()(
   persist(
     (set) => ({
       settings: DEFAULT_SETTINGS,
       patch: (update) =>
         set((state) => ({ settings: { ...state.settings, ...update } })),
+      replays: [],
+      addReplay: (r) =>
+        set((state) => ({ replays: [r, ...state.replays].slice(0, 20) })),
     }),
     { name: "aim-trainer-settings" }
   )

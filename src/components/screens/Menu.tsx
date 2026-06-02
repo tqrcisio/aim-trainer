@@ -16,12 +16,14 @@ export function Menu({
   onPlay,
   onSettings,
   onCrosshairs,
+  onReplays,
 }: {
   best: number | null;
   settings: Settings;
   onPlay: () => void;
   onSettings: () => void;
   onCrosshairs: () => void;
+  onReplays: () => void;
 }) {
   return (
     <div className="overlay">
@@ -70,6 +72,9 @@ export function Menu({
               <div className="w-8 h-8 bg-[#0a121a] border border-border flex items-center justify-center group-hover:border-foreground/40 transition-colors">
                 <CrosshairRenderer params={parseCrosshairCode(settings.crosshairCode)} size={28} />
               </div>
+            </button>
+            <button onClick={onReplays} className="text-[9px] font-mono text-muted-foreground uppercase tracking-widest hover:text-foreground transition-colors flex-shrink-0">
+              Replays
             </button>
             <div className="w-px h-4 bg-border flex-shrink-0" />
             <div className="flex gap-5 flex-1 min-w-0">

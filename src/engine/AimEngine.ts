@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Settings } from "@/store";
+import type { Recorder } from "./Recorder";
 
 export const DEG2RAD = Math.PI / 180;
 export const SIZES = { small: 0.26, medium: 0.4, large: 0.56 } as const;
@@ -38,6 +39,7 @@ export interface EngineHandlers {
 export class AimEngine {
   canvas: HTMLCanvasElement;
   h: EngineHandlers;
+  recorder: Recorder | null;
   settings: Settings;
   playlist: (typeof PLAYLISTS)["gridshot"];
 
@@ -79,9 +81,10 @@ export class AimEngine {
   _onLockChange!: () => void;
   _onLockErr!: () => void;
 
-  constructor(canvas: HTMLCanvasElement, handlers: EngineHandlers) {
+  constructor(canvas: HTMLCanvasElement, handlers: EngineHandlers, recorder: Recorder | null = null) {
     this.canvas = canvas;
     this.h = handlers;
+    this.recorder = recorder;
     this.settings = { sens: 0.4, dpi: 800, fov: 103, size: "medium", invert: 0, crosshairCode: "0;P;h;0;0l;5;0o;2;0a;1;0f;0;1b;0" };
     this.playlist = PLAYLISTS.gridshot;
 
@@ -253,6 +256,7 @@ export class AimEngine {
   _bindEvents() {
     this._onMove = (e: MouseEvent) => {
       if (this.mode !== "playing" || !this.locked) return;
+      this.recorder?.recordMouse(e.movementX, e.movementY);
       const f = this.settings.sens * 0.07 * DEG2RAD;
       this.yaw -= e.movementX * f;
       this.pitch -= e.movementY * f * (this.settings.invert ? -1 : 1);
@@ -302,9 +306,12 @@ export class AimEngine {
       this.rtTotal += rt;
       this.score += 100 + Math.max(0, Math.round((600 - rt) * 0.15));
       this._place(hit);
+      const idx = this.pool.indexOf(hit);
+      this.recorder?.recordShot(true, idx, [hit.position.x, hit.position.y, hit.position.z]);
       this._blip(880, 0.06, 0.05);
       this.h.onHit(true);
     } else {
+      this.recorder?.recordShot(false, -1);
       this._blip(170, 0.05, 0.035);
       this.h.onHit(false);
     }
@@ -333,6 +340,17 @@ export class AimEngine {
     o.stop(t + dur);
   }
 
+  _getKeyframeState() {
+    return {
+      yaw: this.yaw,
+      pitch: this.pitch,
+      targets: this.pool.map(m => ({
+        pos: [m.position.x, m.position.y, m.position.z] as [number, number, number],
+        visible: m.visible,
+      })),
+    };
+  }
+
   start() {
     this._initAudio();
     this.score = 0; this.hits = 0; this.shots = 0; this.rtTotal = 0;
@@ -341,6 +359,7 @@ export class AimEngine {
     this.yaw = 0; this.pitch = 0;
     this.camera.rotation.set(0, 0, 0);
     this._spawnAll();
+    this.recorder?.begin(() => this._getKeyframeState());
     this.mode = "playing";
     this.locked = false;
     this._emitStats();
