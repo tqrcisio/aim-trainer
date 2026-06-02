@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useSettingsStore, type Settings } from "./store";
 import * as THREE from "three";
 import { Button } from "@/components/ui/8bit/button";
 import { Input } from "@/components/ui/8bit/input";
@@ -27,16 +28,6 @@ const PLAYLISTS = {
     z: -9,
   },
 } as const;
-const DEFAULT_SETTINGS = {
-  sens: 0.4,
-  dpi: 800,
-  fov: 103,
-  size: "medium" as keyof typeof SIZES,
-  invert: 0,
-  crosshairCode: "0;P;h;0;0l;5;0o;2;0a;1;0f;0;1b;0",
-};
-
-type Settings = typeof DEFAULT_SETTINGS;
 
 /* ============================================================
    Crosshair system
@@ -94,18 +85,15 @@ function parseCrosshairCode(code: string): CrosshairParams {
 function CrosshairRenderer({
   params,
   size = 64,
-  flash = false,
   className,
 }: {
   params: CrosshairParams;
   size?: number;
-  flash?: boolean;
   className?: string;
 }) {
   const S = size / 64;
   const cx = size / 2;
   const outline = params.outline > 0 ? `0 0 0 1px rgba(0,0,0,${params.outline})` : undefined;
-  const scale = flash ? 1.7 : 1;
 
   const arm = (dir: "top" | "bottom" | "left" | "right", outer = false) => {
     const t = (outer ? params.outerT : params.innerT) * S;
@@ -117,9 +105,6 @@ function CrosshairRenderer({
       backgroundColor: params.color,
       opacity: a,
       boxShadow: outline,
-      transition: "transform 0.05s ease",
-      transform: `scale(${scale})`,
-      transformOrigin: dir === "top" ? "bottom center" : dir === "bottom" ? "top center" : dir === "left" ? "right center" : "left center",
     };
     if (dir === "top")    return <span key={`${outer?'o':'i'}-t`} style={{ ...style, width: t, height: l, left: cx - t / 2, top: cx - o - l }} />;
     if (dir === "bottom") return <span key={`${outer?'o':'i'}-b`} style={{ ...style, width: t, height: l, left: cx - t / 2, top: cx + o }} />;
@@ -375,7 +360,7 @@ class AimEngine {
   constructor(canvas: HTMLCanvasElement, handlers: EngineHandlers) {
     this.canvas = canvas;
     this.h = handlers;
-    this.settings = { ...DEFAULT_SETTINGS };
+    this.settings = { sens: 0.4, dpi: 800, fov: 103, size: "medium", invert: 0, crosshairCode: "0;P;h;0;0l;5;0o;2;0a;1;0f;0;1b;0" };
     this.playlist = PLAYLISTS.gridshot;
 
     this.mode = "idle";
@@ -1292,7 +1277,8 @@ export default function AimRangeTrainer() {
   const [screen, setScreen] = useState<"menu" | "settings" | "playing" | "paused" | "results" | "crosshairs">(
     "menu",
   );
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const settings = useSettingsStore((s) => s.settings);
+  const patch = useSettingsStore((s) => s.patch);
   const [stats, setStats] = useState<StatsState>({ score: 0, time: 60, acc: 100 });
   const [results, setResults] = useState<ResultsData | null>(null);
   const [best, setBest] = useState<number | null>(null);
@@ -1365,8 +1351,8 @@ export default function AimRangeTrainer() {
     [],
   );
   const changeSettings = useCallback(
-    (patch: Partial<Settings>) => setSettings((p) => ({ ...p, ...patch })),
-    [],
+    (update: Partial<Settings>) => patch(update),
+    [patch],
   );
   const openCrosshairs = useCallback(() => setScreen("crosshairs"), []);
   const closeCrosshairs = useCallback(() => setScreen("menu"), []);
@@ -1381,7 +1367,7 @@ export default function AimRangeTrainer() {
 
       {playing && (
         <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", pointerEvents: "none", zIndex: 5 }}>
-          <CrosshairRenderer params={crosshairParams} size={72} flash={hit} />
+          <CrosshairRenderer params={crosshairParams} size={72} />
         </div>
       )}
 
