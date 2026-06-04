@@ -77,7 +77,7 @@ export function ReplayScreen({ replay, onClose }: { replay: Replay; onClose: () 
 
   const [playing, setPlaying] = useState(false);
   const [currentT, setCurrentT] = useState(0);
-  const [cameraState, setCameraState] = useState({ yaw: 0, pitch: 0 });
+  const [, setCameraState] = useState({ yaw: 0, pitch: 0 });
   const [speed, setSpeed] = useState(1);
 
   const settings = useSettingsStore((s) => s.settings);
