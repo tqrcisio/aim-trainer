@@ -1,5 +1,4 @@
 import type { Replay } from "@/engine/replay-types";
-import { Button } from "@/components/ui/8bit/button";
 import { Card, CardContent } from "@/components/ui/8bit/card";
 import { Reticles } from "@/components/Hud";
 
